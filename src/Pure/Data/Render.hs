@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, MultiWayIf, FlexibleInstances #-}
+{-# LANGUAGE CPP, RecordWildCards, OverloadedStrings, MultiWayIf, FlexibleInstances, ViewPatterns #-}
 #ifdef USE_TEMPLATE_HASKELL
 {-# LANGUAGE TemplateHaskell #-}
 #endif
@@ -55,7 +55,7 @@ instance Monoid StaticHTML where
   mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
 #ifdef USE_TEMPLATE_HASKELL
 instance Lift StaticHTML where
-  lift (StaticHTML htmlt) = [| StaticHTML htmlt |]
+  lift (StaticHTML (Txt.unpack -> htmls)) = [| StaticHTML (Txt.pack htmls) |]
 #endif
 
 staticHTML :: View -> StaticHTML
