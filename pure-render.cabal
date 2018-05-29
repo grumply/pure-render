@@ -16,9 +16,6 @@ Flag use-template-haskell
      Manual: True
 
 library
-  if flag(use-template-haskell)
-    cpp-options: -DUSE_TEMPLATE_HASKELL
-
   exposed-modules:
     Pure.Data.Render
 
@@ -33,6 +30,7 @@ library
     containers
 
   if flag(use-template-haskell)
+    cpp-options: -DUSE_TEMPLATE_HASKELL
     build-depends: template-haskell
 
   hs-source-dirs:      src
