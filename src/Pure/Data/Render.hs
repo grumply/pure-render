@@ -184,6 +184,8 @@ instance ToJSON View where
       go (NullView _) =
         object [ "type" .= ("NullView" :: Txt) ]
 
+      go (LazyView f a) = go (view (f a))
+
       go _ = object []
 
 instance FromJSON View where
@@ -308,6 +310,8 @@ instance Show View where
 
       go n (SomeView _ c) = show (view c)
 
+      go n (LazyView f a) = go n (view (f a))
+
       go _ _ = ""
 
 
@@ -350,6 +354,8 @@ instance ToTxt View where
       Just ref -> toTxt $ unsafePerformIO (readIORef (crView ref))
 
   toTxt (SomeView _ c) = toTxt (view c)
+
+  toTxt (LazyView f a) = toTxt (view (f a))
 
   toTxt _ = mempty
 
