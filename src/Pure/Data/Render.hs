@@ -98,13 +98,13 @@ renderer :: (View,MVar View) -> View
 renderer = ComponentIO $ \self ->
   def
     { construct = do
-        (v,_) <- getProps self
+        (v,_) <- ask self
         return v
     , mounted = do
-        v <- getView self
-        (_,mv) <- getProps self
+        v <- look self
+        (_,mv) <- ask self
         putMVar mv v
-        void $ setState self $ \_ _ -> return (NullView Nothing,return ())
+        modify_ self $ \_ _ -> NullView Nothing
     , render = \_ -> id
     }
 
