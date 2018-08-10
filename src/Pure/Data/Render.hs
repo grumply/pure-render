@@ -52,7 +52,12 @@ instance FromTxt StaticHTML where
   fromTxt = StaticHTML
 instance Monoid StaticHTML where
   mempty = fromTxt mempty
+#if !MIN_VERSION_base(4,11,0)
   mappend htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
+#else
+instance Semigroup StaticHTML where
+  (<>) htmlt1 htmlt2 = fromTxt $ toTxt htmlt1 <> toTxt htmlt2
+#endif
 #ifdef USE_TEMPLATE_HASKELL
 instance Lift StaticHTML where
   lift (StaticHTML (Txt.unpack -> htmls)) = [| StaticHTML (Txt.pack htmls) |]
