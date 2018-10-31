@@ -29,6 +29,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 -- from base
+import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.Foldable
@@ -77,25 +78,35 @@ selfClosing tag = tag `elem` selfclosing
       ,"meta","param","source","track","wbr"
       ]
 
+cleanFeatures :: Features -> Features
+cleanFeatures Features_ {..} = Features_
+  { classes    = Set.delete "" classes
+  , styles     = Map.delete "" styles
+  , attributes = Map.delete "" attributes
+  , properties = Map.delete "" properties
+  , listeners  = []
+  , lifecycles = []
+  }
+
 instance ToJSON Features where
-  toJSON f =
+  toJSON (cleanFeatures -> f) =
 #ifdef __GHCJS__
     objectValue $
 #endif
       object
-        [ "classes"    .= toJSON (Set.toList $ classes f)
-        , "styles"     .= toJSON (Map.toList $ styles f)
-        , "attributes" .= toJSON (Map.toList $ attributes f)
-        , "properties" .= toJSON (Map.toList $ properties f)
-        ]
+        ( (if Set.null (classes f)    then [] else ["c" .= toJSON (Set.toList $ classes    f)]) <>
+          (if Map.null (styles f)     then [] else ["s" .= toJSON (Map.toList $ styles     f)]) <>
+          (if Map.null (attributes f) then [] else ["a" .= toJSON (Map.toList $ attributes f)]) <>
+          (if Map.null (properties f) then [] else ["p" .= toJSON (Map.toList $ properties f)])
+        )
 
 instance FromJSON Features where
   parseJSON o0 = do
     flip (withObject "Features") o0 $ \o -> do
-      classes    <- Set.fromList <$> o .: "classes"
-      styles     <- Map.fromList <$> o .: "styles"
-      attributes <- Map.fromList <$> o .: "attributes"
-      properties <- Map.fromList <$> o .: "properties"
+      classes    <- Set.fromList <$> ((o .: "c") <|> pure mempty)
+      styles     <- Map.fromList <$> ((o .: "s") <|> pure mempty)
+      attributes <- Map.fromList <$> ((o .: "a") <|> pure mempty)
+      properties <- Map.fromList <$> ((o .: "p") <|> pure mempty)
       let listeners = []; lifecycles = []
       return Features_ {..}
 
@@ -138,97 +149,86 @@ instance ToJSON View where
 
       go (SomeView _ v) = go (view v)
 
-      go (TextView _ c) =
-        object
-          [ "type" .= ("TextView" :: Txt)
-          , "content" .= c
-          ]
+      go (TextView _ s) =
+        object (if Txt.null s then [] else [ "s" .= s ])
 
-      go (RawView _ t fs c) =
+      go (RawView _ t fs s) =
         object
-          [ "type" .= ("RawView" :: Txt)
-          , "tag" .= t
-          , "features" .= toJSON fs
-          , "content" .= c
-          ]
+          ([ "_" .= ("R" :: Txt), "t" .= t] <>
+           ( if nullFeatures fs then [] else [ "f" .= toJSON fs ]) <>
+           ( if Txt.null s      then [] else [ "s" .= s ])
+          )
 
       go (KHTMLView _ t fs ks) =
         object
-          [ "type" .= ("KHTMLView" :: Txt)
-          , "tag" .= t
-          , "features" .= toJSON fs
-          , "keyedChildren" .= toJSON ks
-          ]
+          ([ "_" .= ("KH" :: Txt), "t" .= t] <>
+           ( if nullFeatures fs then [] else [ "f" .= toJSON fs ]) <>
+           ( if Prelude.null ks then [] else [ "k" .= toJSON ks ])
+          )
 
       go (HTMLView _ t fs cs) =
         object
-          [ "type" .= ("HTMLView" :: Txt)
-          , "tag" .= t
-          , "features" .= toJSON fs
-          , "children" .= toJSON cs
-          ]
+          ( ["t" .= t] <>
+           ( if nullFeatures fs then [] else [ "f" .= toJSON fs ]) <>
+           ( if Prelude.null cs then [] else [ "c" .= toJSON cs ])
+          )
 
       go (KSVGView _ t fs xs ks) =
         object
-          [ "type" .= ("KSVGView" :: Txt)
-          , "tag" .= t
-          , "features" .= toJSON fs
-          , "xlinks" .= toJSON (Map.toList xs)
-          , "keyedChildren" .= toJSON ks
-          ]
+          ([ "_" .= ("KS" :: Txt), "t" .= t] <>
+           ( if nullFeatures fs then [] else [ "f" .= toJSON fs ]) <>
+           ( if Prelude.null xs then [] else [ "x" .= toJSON (Map.toList xs) ]) <>
+           ( if Prelude.null ks then [] else [ "k" .= toJSON ks ])
+          )
 
       go (SVGView _ t fs xs cs) =
         object
-          [ "type" .= ("SVGView" :: Txt)
-          , "tag" .= t
-          , "features" .= toJSON fs
-          , "xlinks" .= toJSON (Map.toList xs)
-          , "children" .= toJSON cs
-          ]
-
-      go (NullView _) =
-        object [ "type" .= ("NullView" :: Txt) ]
+          ([ "_" .= ("S" :: Txt), "t" .= t] <>
+           ( if nullFeatures fs then [] else [ "f" .= toJSON fs ]) <>
+           ( if Prelude.null xs then [] else [ "x" .= toJSON (Map.toList xs) ]) <>
+           ( if Prelude.null cs then [] else [ "c" .= toJSON cs ])
+          )
 
       go (LazyView f a) = go (view (f a))
 
-      go _ = object []
+      go _ = object [ "_" .= ("N" :: Txt) ]
 
 instance FromJSON View where
   parseJSON o0 = do
     flip (withObject "View") o0 $ \o -> do
-      t <- o .: "type"
+      t <- (o .: "_") <|> pure mempty
       case t :: Txt of
-        "TextView" -> do
-          c <- o .: "content"
-          pure $ TextView Nothing c
-        "RawView" -> do
-          t <- o .: "tag"
-          fs <- o .: "features"
-          c <- o .: "content"
-          pure $ RawView Nothing t fs c
-        "KHTMLView" -> do
-          t <- o .: "tag"
-          fs <- o .: "features"
-          ks <- o .: "keyedChildren"
+        "" -> 
+          (do t  <-  o .: "t"
+              fs <- (o .: "f") <|> pure mempty
+              cs <- (o .: "c") <|> pure mempty
+              pure $ HTMLView Nothing t fs cs
+          ) <|> (do s <- (o .: "s") <|> pure mempty
+                    pure $ TextView Nothing s
+                )
+        "R" -> do
+          t  <-  o .: "t"
+          fs <- (o .: "f") <|> pure mempty
+          s  <- (o .: "s") <|> pure mempty
+          pure $ RawView Nothing t fs s
+        "KH" -> do
+          t  <-  o .: "t"
+          fs <- (o .: "f") <|> pure mempty
+          ks <- (o .: "k") <|> pure mempty
           pure $ KHTMLView Nothing t fs ks
-        "HTMLView" -> do
-          t <- o .: "tag"
-          fs <- o .: "features"
-          cs <- o .: "children"
-          pure $ HTMLView Nothing t fs cs
-        "KSVGView" -> do
-          t <- o .: "tag"
-          fs <- o .: "features"
-          xs <- o .: "xlinks"
-          ks <- o .: "keyedChildren"
+        "KS" -> do
+          t  <-  o .: "t"
+          fs <- (o .: "f") <|> pure mempty
+          xs <- (o .: "x") <|> pure mempty
+          ks <- (o .: "k") <|> pure mempty
           pure $ KSVGView Nothing t fs (Map.fromList xs) ks
-        "SVGView" -> do
-          t <- o .: "tag"
-          fs <- o .: "features"
-          xs <- o .: "xlinks"
-          cs <- o .: "children"
+        "S" -> do
+          t  <-  o .: "t"
+          fs <- (o .: "f") <|> pure mempty
+          xs <- (o .: "x") <|> pure mempty
+          cs <- (o .: "c") <|> pure mempty
           pure $ SVGView Nothing t fs (Map.fromList xs) cs
-        _ -> pure $ NullView Nothing
+        "N" -> pure $ NullView Nothing
 
 instance Show Features where
   show = fromTxt . toTxt
@@ -236,33 +236,28 @@ instance Show Features where
 instance ToTxt Features where
   toTxt Features_ {..} =
     let
-        cs    = "class=\""
-              <> (mconcat
-                  $ List.intersperse " "
-                  $ Set.toList
-                  $ Set.delete "" classes
-                 )
-              <> "\""
+        cs    = 
+          case Set.toList $ Set.delete "" classes of
+            [] -> ""
+            xs -> " class='" <> (mconcat $ List.intersperse " " xs) <> "'"
 
-        ss    = "style=\""
-              <> (mconcat
-                  $ List.intersperse ";"
-                  $ fmap (\(k,v) -> k <> ":" <> v)
-                  $ Map.toList styles
-                 )
-              <> "\""
+        ss    = 
+          case Map.toList $ Map.delete "" styles of
+            [] -> ""
+            xs -> " style='" <> (mconcat $ List.intersperse ";" $ fmap (\(k,v) -> k <> ":" <> v) $ xs) <> "'"
 
-        attrs = mconcat
-              $ List.intersperse " "
-              $ fmap (\(k,v) -> k <> "=\"" <> v <> "\"")
-              $ Map.toList attributes
+        attrs = 
+          case Map.toList $ Map.delete "" attributes of
+            [] -> ""
+            xs -> mconcat $ " " : (List.intersperse " " $ fmap (\(k,v) -> k <> "='" <> v <> "'") xs)
 
-        props = mconcat
-              $ List.intersperse " "
-              $ fmap (\(k,v) -> k <> "=\"" <> v <> "\"")
-              $ Map.toList properties
+        props = 
+          case Map.toList $ Map.delete "" properties of
+            [] -> ""
+            xs -> mconcat $ " " : (List.intersperse " " $ fmap (\(k,v) -> k <> "='" <> v <> "'") xs)
+
     in
-        cs <> " " <> ss <> " " <> attrs <> " " <> props
+        cs <> ss <> attrs <> props
 
 nullFeatures Features_ {..} =
   styles == mempty
@@ -274,12 +269,8 @@ instance Show View where
   show = go 0
     where
       go n TextView {..} = List.replicate n ' ' <> fromTxt content <> "\n"
-      go n RawView {..} =
-        "<" <> fromTxt tag
-            <> (if nullFeatures features then "" else " " <> show features)
-            <>
-        ">" <> fromTxt content <>
-        "</" <> fromTxt tag <> ">"
+      go n RawView {..} = 
+        "<" <> fromTxt tag <> show features <> ">" <> fromTxt content <> "</" <> fromTxt tag <> ">"
 
       go n KHTMLView {..} =
         go n HTMLView { children = fmap snd keyedChildren, ..}
@@ -294,7 +285,7 @@ instance Show View where
 
       go n HTMLView {..} =
         List.replicate (2 * n) ' ' <>
-        "<" <> fromTxt tag <> (if nullFeatures features then "" else " " <> show features)
+        "<" <> fromTxt tag <> show features
             <> if | tag == "?xml"     -> "?>\n"
                   | tag == "!doctype" -> ">\n"
                   | selfClosing tag   -> "/>\n"
@@ -324,17 +315,16 @@ instance ToTxt View where
   toTxt TextView {..} = content
 
   toTxt RawView {..} =
-    "<" <> tag <> (if nullFeatures features then "" else " " <> toTxt features) <>
-      ">" <> content <> "</" <> tag <> ">"
+    "<" <> tag <> toTxt features <> ">" <> content <> "</" <> tag <> ">"
 
   toTxt KHTMLView {..} =
     toTxt HTMLView { children = fmap snd keyedChildren, ..}
 
   toTxt HTMLView {..} =
     if tag == "?xml" then
-      "<?xml"  <> (if nullFeatures features then "" else " " <> toTxt features) <> "?>"
+      "<?xml"  <> toTxt features <> "?>"
     else
-      "<" <> tag <> (if nullFeatures features then "" else " " <> toTxt features) <>
+      "<" <> tag <> toTxt features <>
         if selfClosing tag then
           "/>"
         else
