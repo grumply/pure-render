@@ -147,7 +147,7 @@ instance ToJSON View where
           Just ref ->
             go (unsafePerformIO (readIORef (crView ref)))
 
-      go (SomeView _ v) = go (view v)
+      go (SomeView v) = go (view v)
 
       go (TextView _ s) =
         object (if Txt.null s then [] else [ "s" .= s ])
@@ -304,7 +304,7 @@ instance Show View where
 
           Just ref -> show $ unsafePerformIO (readIORef (crView ref))
 
-      go n (SomeView _ c) = show (view c)
+      go n (SomeView c) = show (view c)
 
       go n (LazyView f a) = go n (view (f a))
 
@@ -348,7 +348,7 @@ instance ToTxt View where
 
       Just ref -> toTxt $ unsafePerformIO (readIORef (crView ref))
 
-  toTxt (SomeView _ c) = toTxt (view c)
+  toTxt (SomeView c) = toTxt (view c)
 
   toTxt (LazyView f a) = toTxt (view (f a))
 
