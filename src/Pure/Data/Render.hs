@@ -111,7 +111,7 @@ instance FromJSON Features where
       return Features_ {..}
 
 renderer :: (View,MVar View) -> View
-renderer = ComponentIO $ \self ->
+renderer = Component $ \self ->
   def
     { construct = do
         (v,_) <- ask self
@@ -146,6 +146,8 @@ instance ToJSON View where
 
           Just ref ->
             go (unsafePerformIO (readIORef (crView ref)))
+
+      go (TaggedView _ v) = go v
 
       go (SomeView v) = go (view v)
 
@@ -304,7 +306,9 @@ instance Show View where
 
           Just ref -> show $ unsafePerformIO (readIORef (crView ref))
 
-      go n (SomeView c) = show (view c)
+      go n (SomeView c) = go n (view c)
+
+      go n (TaggedView _ v) = go n v
 
       go n (LazyView f a) = go n (view (f a))
 
@@ -349,6 +353,8 @@ instance ToTxt View where
       Just ref -> toTxt $ unsafePerformIO (readIORef (crView ref))
 
   toTxt (SomeView c) = toTxt (view c)
+
+  toTxt (TaggedView _ v) = toTxt v
 
   toTxt (LazyView f a) = toTxt (view (f a))
 
