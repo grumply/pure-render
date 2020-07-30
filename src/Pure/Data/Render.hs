@@ -90,9 +90,6 @@ cleanFeatures Features_ {..} = Features_
 
 instance ToJSON Features where
   toJSON (cleanFeatures -> f) =
-#ifdef __GHCJS__
-    objectValue $
-#endif
       object
         ( (if Set.null (classes f)    then [] else ["c" .= toJSON (Set.toList $ classes    f)]) <>
           (if Map.null (styles f)     then [] else ["s" .= toJSON (Map.toList $ styles     f)]) <>
@@ -130,9 +127,6 @@ renderer = Component $ \self ->
 -- destination as a path selector....
 instance ToJSON View where
   toJSON a =
-#ifdef __GHCJS__
-    objectValue $
-#endif
       go a
     where
       go cv@ComponentView { record = r, ..} =
