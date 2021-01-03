@@ -186,6 +186,8 @@ instance ToJSON View where
           )
 
       go (LazyView f a) = go (view (f a))
+      
+      go (Prebuilt v) = go v
 
       go _ = object [ "_" .= ("N" :: Txt) ]
 
@@ -305,6 +307,8 @@ instance Show View where
       go n (TaggedView _ v) = go n v
 
       go n (LazyView f a) = go n (view (f a))
+      
+      go n (Prebuilt v) = go n v
 
       go _ _ = ""
 
@@ -351,6 +355,8 @@ instance ToTxt View where
   toTxt (TaggedView _ v) = toTxt v
 
   toTxt (LazyView f a) = toTxt (view (f a))
+  
+  toTxt (Prebuilt v) = toTxt v
 
   toTxt _ = mempty
 
